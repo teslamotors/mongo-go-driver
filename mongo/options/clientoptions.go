@@ -109,6 +109,7 @@ type ClientOptions struct {
 	MaxConnIdleTime          *time.Duration
 	MaxPoolSize              *uint64
 	MinPoolSize              *uint64
+	MinConnIODeadline        *time.Duration
 	PoolMonitor              *event.PoolMonitor
 	Monitor                  *event.CommandMonitor
 	ServerMonitor            *event.ServerMonitor
@@ -803,6 +804,9 @@ func MergeClientOptions(opts ...*ClientOptions) *ClientOptions {
 		}
 		if opt.MaxConnIdleTime != nil {
 			c.MaxConnIdleTime = opt.MaxConnIdleTime
+		}
+		if opt.MinConnIODeadline != nil {
+			c.MinConnIODeadline = opt.MinConnIODeadline
 		}
 		if opt.MaxPoolSize != nil {
 			c.MaxPoolSize = opt.MaxPoolSize

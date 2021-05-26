@@ -19,21 +19,22 @@ import (
 var defaultRegistry = bson.NewRegistryBuilder().Build()
 
 type serverConfig struct {
-	clock                     *session.ClusterClock
-	compressionOpts           []string
-	connectionOpts            []ConnectionOption
-	appname                   string
-	heartbeatInterval         time.Duration
-	heartbeatTimeout          time.Duration
-	maxConns                  uint64
-	minConns                  uint64
-	poolMonitor               *event.PoolMonitor
-	serverMonitor             *event.ServerMonitor
-	connectionPoolMaxIdleTime time.Duration
-	registry                  *bsoncodec.Registry
-	monitoringDisabled        bool
-	serverAPI                 *driver.ServerAPIOptions
-	loadBalanced              bool
+	clock                       *session.ClusterClock
+	compressionOpts             []string
+	connectionOpts              []ConnectionOption
+	appname                     string
+	heartbeatInterval           time.Duration
+	heartbeatTimeout            time.Duration
+	maxConns                    uint64
+	minConns                    uint64
+	poolMonitor                 *event.PoolMonitor
+	serverMonitor               *event.ServerMonitor
+	connectionPoolMaxIdleTime   time.Duration
+	connectionMinimumIODeadline time.Duration
+	registry                    *bsoncodec.Registry
+	monitoringDisabled          bool
+	serverAPI                   *driver.ServerAPIOptions
+	loadBalanced                bool
 }
 
 func newServerConfig(opts ...ServerOption) (*serverConfig, error) {

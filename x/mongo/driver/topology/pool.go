@@ -26,6 +26,9 @@ var ErrPoolConnected = PoolError("attempted to Connect to an already connected p
 // or disconnecting pool.
 var ErrPoolDisconnected = PoolError("attempted to check out a connection from closed connection pool")
 
+// ErrPoolMinimumIODeadlineNotMet is returned if a connection would be used with little to no context deadline left
+var ErrPoolMinimumIODeadlineNotMet = PoolError("remaining context deadline did not meet the minimum needed for IO")
+
 // ErrConnectionClosed is returned from an attempt to use an already closed connection.
 var ErrConnectionClosed = ConnectionError{ConnectionID: "<closed>", message: "connection is closed"}
 
@@ -42,11 +45,12 @@ func (pe PoolError) Error() string { return string(pe) }
 
 // poolConfig contains all aspects of the pool that can be configured
 type poolConfig struct {
-	Address     address.Address
-	MinPoolSize uint64
-	MaxPoolSize uint64 // MaxPoolSize is not used because handling the max number of connections in the pool is handled in server. This is only used for command monitoring
-	MaxIdleTime time.Duration
-	PoolMonitor *event.PoolMonitor
+	Address                     address.Address
+	ConnectionMinimumIODeadline time.Duration
+	MinPoolSize                 uint64
+	MaxPoolSize                 uint64 // MaxPoolSize is not used because handling the max number of connections in the pool is handled in server. This is only used for command monitoring
+	MaxIdleTime                 time.Duration
+	PoolMonitor                 *event.PoolMonitor
 }
 
 // checkOutResult is all the values that can be returned from a checkOut
@@ -58,11 +62,12 @@ type checkOutResult struct {
 
 // pool is a wrapper of resource pool that follows the CMAP spec for connection pools
 type pool struct {
-	address    address.Address
-	opts       []ConnectionOption
-	conns      *resourcePool // pool for non-checked out connections
-	generation *poolGenerationMap
-	monitor    *event.PoolMonitor
+	address                     address.Address
+	opts                        []ConnectionOption
+	conns                       *resourcePool // pool for non-checked out connections
+	generation                  *poolGenerationMap
+	monitor                     *event.PoolMonitor
+	connectionMinimumIODeadline time.Duration
 
 	// Must be accessed using the atomic package.
 	connected                    int32
@@ -153,13 +158,14 @@ func newPool(config poolConfig, connOpts ...ConnectionOption) (*pool, error) {
 	}
 
 	pool := &pool{
-		address:    config.Address,
-		monitor:    config.PoolMonitor,
-		connected:  disconnected,
-		opened:     make(map[uint64]*connection),
-		opts:       opts,
-		sem:        semaphore.NewWeighted(int64(maxConns)),
-		generation: newPoolGenerationMap(),
+		address:                     config.Address,
+		monitor:                     config.PoolMonitor,
+		connected:                   disconnected,
+		connectionMinimumIODeadline: config.ConnectionMinimumIODeadline,
+		opened:                      make(map[uint64]*connection),
+		opts:                        opts,
+		sem:                         semaphore.NewWeighted(int64(maxConns)),
+		generation:                  newPoolGenerationMap(),
 	}
 	pool.opts = append(pool.opts, withGenerationNumberFn(func(_ generationNumberFn) generationNumberFn { return pool.getGenerationForNewConnection }))
 
@@ -340,6 +346,7 @@ func (p *pool) get(ctx context.Context) (*connection, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	start := time.Now()
 
 	if atomic.LoadInt32(&p.connected) != connected {
 		if p.monitor != nil {
@@ -368,6 +375,25 @@ func (p *pool) get(ctx context.Context) (*connection, error) {
 			maxPoolSize:                  p.conns.maxSize,
 		}
 		return nil, errWaitQueueTimeout
+	}
+
+	if p.connectionMinimumIODeadline > 0 {
+		// Fast fail if the remaining context deadline is too small to initiate network IO
+		if deadline, ok := ctx.Deadline(); ok {
+			if time.Until(deadline) < p.connectionMinimumIODeadline {
+				if p.monitor != nil {
+					acquisitionDuration := time.Since(start)
+					p.monitor.Event(&event.PoolEvent{
+						Type:     event.GetFailedMinimumIO,
+						Address:  p.address.String(),
+						Reason:   event.ReasonTimedOut,
+						Duration: &acquisitionDuration,
+					})
+				}
+				p.sem.Release(1)
+				return nil, ErrPoolMinimumIODeadlineNotMet
+			}
+		}
 	}
 
 	// This loop is so that we don't end up with more than maxPoolSize connections if p.conns.Maintain runs between
@@ -410,10 +436,12 @@ func (p *pool) get(ctx context.Context) (*connection, error) {
 			}
 
 			if p.monitor != nil {
+				acquisitionDuration := time.Since(start)
 				p.monitor.Event(&event.PoolEvent{
 					Type:         event.GetSucceeded,
 					Address:      p.address.String(),
 					ConnectionID: c.poolID,
+					Duration:     &acquisitionDuration,
 				})
 			}
 			return c, nil
