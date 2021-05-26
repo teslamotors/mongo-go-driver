@@ -58,6 +58,7 @@ type connection struct {
 	cancelConnectContext context.CancelFunc
 	connectContextMade   chan struct{}
 	canStream            bool
+	checkoutTime         time.Time
 	currentlyStreaming   bool
 	connectContextMutex  sync.Mutex
 	cancellationListener cancellationListener
