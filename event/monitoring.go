@@ -8,6 +8,7 @@ package event // import "go.mongodb.org/mongo-driver/event"
 
 import (
 	"context"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -63,20 +64,22 @@ const (
 	ReasonPoolClosed        = "poolClosed"
 	ReasonStale             = "stale"
 	ReasonConnectionErrored = "connectionError"
+	ReasonPoolReduction     = "poolReduction"
 	ReasonTimedOut          = "timeout"
 )
 
 // strings for pool command monitoring types
 const (
-	ConnectionClosed   = "ConnectionClosed"
-	PoolCreated        = "ConnectionPoolCreated"
-	ConnectionCreated  = "ConnectionCreated"
-	ConnectionReady    = "ConnectionReady"
-	GetFailed          = "ConnectionCheckOutFailed"
-	GetSucceeded       = "ConnectionCheckedOut"
-	ConnectionReturned = "ConnectionCheckedIn"
-	PoolCleared        = "ConnectionPoolCleared"
-	PoolClosedEvent    = "ConnectionPoolClosed"
+	ConnectionClosed      = "ConnectionClosed"
+	PoolCreated           = "ConnectionPoolCreated"
+	ConnectionCreated     = "ConnectionCreated"
+	ConnectionEstablished = "ConnectionEstablished"
+	ConnectionReady       = "ConnectionReady"
+	GetFailed             = "ConnectionCheckOutFailed"
+	GetSucceeded          = "ConnectionCheckedOut"
+	ConnectionReturned    = "ConnectionCheckedIn"
+	PoolCleared           = "ConnectionPoolCleared"
+	PoolClosedEvent       = "ConnectionPoolClosed"
 )
 
 // MonitorPoolOptions contains pool options as formatted in pool events
@@ -93,6 +96,7 @@ type PoolEvent struct {
 	ConnectionID uint64              `json:"connectionId"`
 	PoolOptions  *MonitorPoolOptions `json:"options"`
 	Reason       string              `json:"reason"`
+	Duration     *time.Duration      `json:"duration"`
 	// ServiceID is only set if the Type is PoolCleared and the server is deployed behind a load balancer. This field
 	// can be used to distinguish between individual servers in a load balanced deployment.
 	ServiceID *primitive.ObjectID `json:"serviceId"`
