@@ -66,6 +66,7 @@ const (
 	ReasonConnectionErrored = "connectionError"
 	ReasonPoolReduction     = "poolReduction"
 	ReasonTimedOut          = "timeout"
+	ReasonMinimumIO         = "minimumIOTimeout"
 )
 
 // strings for pool command monitoring types

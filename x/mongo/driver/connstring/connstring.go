@@ -80,6 +80,8 @@ type ConnString struct {
 	MaxPoolSizeSet                     bool
 	MinPoolSize                        uint64
 	MinPoolSizeSet                     bool
+	MinConnIODuration                  time.Duration
+	MinConnIODurationSet               bool
 	Password                           string
 	PasswordSet                        bool
 	ReadConcernLevel                   string
@@ -697,6 +699,13 @@ func (p *parser) addOption(pair string) error {
 		}
 		p.MinPoolSize = uint64(n)
 		p.MinPoolSizeSet = true
+	case "minconniodurationms":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 0 {
+			return fmt.Errorf("invalid value for %s: %s", key, value)
+		}
+		p.MinConnIODuration = time.Duration(n) * time.Millisecond
+		p.MinConnIODurationSet = true
 	case "readconcernlevel":
 		p.ReadConcernLevel = value
 	case "readpreference":

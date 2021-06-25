@@ -49,6 +49,7 @@ type connectionConfig struct {
 	poolMonitor              *event.PoolMonitor
 	readTimeout              time.Duration
 	writeTimeout             time.Duration
+	minIODuration            time.Duration
 	tlsConfig                *tls.Config
 	compressors              []string
 	zlibLevel                *int
@@ -137,6 +138,14 @@ func WithHandshaker(fn func(Handshaker) Handshaker) ConnectionOption {
 func WithIdleTimeout(fn func(time.Duration) time.Duration) ConnectionOption {
 	return func(c *connectionConfig) error {
 		c.idleTimeout = fn(c.idleTimeout)
+		return nil
+	}
+}
+
+// WithMinIODuration configures the minimum duration that a connection will be used for IO
+func WithMinIODuration(fn func(time.Duration) time.Duration) ConnectionOption {
+	return func(c *connectionConfig) error {
+		c.minIODuration = fn(c.minIODuration)
 		return nil
 	}
 }
