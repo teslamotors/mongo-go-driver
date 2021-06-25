@@ -46,6 +46,7 @@ type connection struct {
 	idleDeadline         atomic.Value // Stores a time.Time
 	readTimeout          time.Duration
 	writeTimeout         time.Duration
+	minIODuration        time.Duration
 	desc                 description.Server
 	isMasterRTT          time.Duration
 	compressor           wiremessage.CompressorID
@@ -86,6 +87,7 @@ func newConnection(addr address.Address, opts ...ConnectionOption) (*connection,
 		idleTimeout:          cfg.idleTimeout,
 		readTimeout:          cfg.readTimeout,
 		writeTimeout:         cfg.writeTimeout,
+		minIODuration:        cfg.minIODuration,
 		connectDone:          make(chan struct{}),
 		config:               cfg,
 		connectContextMade:   make(chan struct{}),

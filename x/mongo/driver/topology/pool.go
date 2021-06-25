@@ -26,6 +26,9 @@ var ErrPoolConnected = PoolError("attempted to Connect to an already connected p
 // or disconnecting pool.
 var ErrPoolDisconnected = PoolError("attempted to check out a connection from closed connection pool")
 
+// ErrPoolMinimumIODeadlineNotMet is returned if a connection would be used with little to no context deadline left
+var ErrPoolMinimumIODeadlineNotMet = PoolError("remaining context deadline did not meet the minimum needed for IO")
+
 // ErrConnectionClosed is returned from an attempt to use an already closed connection.
 var ErrConnectionClosed = ConnectionError{ConnectionID: "<closed>", message: "connection is closed"}
 
@@ -323,7 +326,7 @@ func (p *pool) get(ctx context.Context) (*connection, error) {
 			if !p.processGetConnection(c, start) {
 				continue
 			}
-			return c, nil
+			return p.checkMinimumIODuration(ctx, c)
 		default:
 			atomic.AddUint32(&p.waiting, 1)
 			defer func() {
@@ -338,21 +341,42 @@ func (p *pool) get(ctx context.Context) (*connection, error) {
 	for {
 		select {
 		case <-ctx.Done():
-			elapsed := time.Since(start)
-			p.monitor.Event(&event.PoolEvent{
-				Type:     event.GetFailed,
-				Address:  p.address.String(),
-				Reason:   event.ReasonTimedOut,
-				Duration: &elapsed,
-			})
+			if p.monitor != nil {
+				elapsed := time.Since(start)
+				p.monitor.Event(&event.PoolEvent{
+					Type:     event.GetFailed,
+					Address:  p.address.String(),
+					Reason:   event.ReasonTimedOut,
+					Duration: &elapsed,
+				})
+			}
 			return nil, ctx.Err()
 		case c := <-p.poolChan:
 			if !p.processGetConnection(c, start) {
 				continue
 			}
-			return c, nil
+			return p.checkMinimumIODuration(ctx, c)
 		}
 	}
+}
+
+func (p *pool) checkMinimumIODuration(ctx context.Context, c *connection) (*connection, error) {
+	if c.minIODuration > 0 {
+		if deadline, ok := ctx.Deadline(); ok {
+			if time.Until(deadline) < c.minIODuration {
+				if p.monitor != nil {
+					p.monitor.Event(&event.PoolEvent{
+						Type:    event.GetFailed,
+						Address: p.address.String(),
+						Reason:  event.ReasonMinimumIO,
+					})
+				}
+				p.put(c)
+				return nil, ErrPoolMinimumIODeadlineNotMet
+			}
+		}
+	}
+	return c, nil
 }
 
 // processGetConnection expires connections and writes monitoring events for a connection pulled from the buffered channel
@@ -364,13 +388,15 @@ func (p *pool) processGetConnection(c *connection, start time.Time) bool {
 		return false
 	}
 
-	elapsed := time.Since(start)
-	p.monitor.Event(&event.PoolEvent{
-		Type:         event.GetSucceeded,
-		Address:      p.address.String(),
-		ConnectionID: c.poolID,
-		Duration:     &elapsed,
-	})
+	if p.monitor != nil {
+		elapsed := time.Since(start)
+		p.monitor.Event(&event.PoolEvent{
+			Type:         event.GetSucceeded,
+			Address:      p.address.String(),
+			ConnectionID: c.poolID,
+			Duration:     &elapsed,
+		})
+	}
 
 	atomic.AddUint32(&p.inUse, 1)
 	c.checkoutTime = time.Now()
