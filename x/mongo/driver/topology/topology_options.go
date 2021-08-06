@@ -106,6 +106,10 @@ func WithConnString(fn func(connstring.ConnString) connstring.ConnString) Option
 			c.serverOpts = append(c.serverOpts, WithMinConnections(func(u uint64) uint64 { return cs.MinPoolSize }))
 		}
 
+		if cs.MinConnIODuration > 0 {
+			connOpts = append(connOpts, WithMinIODuration(func(time.Duration) time.Duration { return cs.MinConnIODuration }))
+		}
+
 		if cs.ReplicaSet != "" {
 			c.replicaSetName = cs.ReplicaSet
 		}
