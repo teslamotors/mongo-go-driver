@@ -81,6 +81,7 @@ const (
 	ConnectionReturned    = "ConnectionCheckedIn"
 	PoolCleared           = "ConnectionPoolCleared"
 	PoolClosedEvent       = "ConnectionPoolClosed"
+	PoolStatsEvent        = "ConnectionPoolStats"
 )
 
 // MonitorPoolOptions contains pool options as formatted in pool events
@@ -98,9 +99,16 @@ type PoolEvent struct {
 	PoolOptions  *MonitorPoolOptions `json:"options"`
 	Reason       string              `json:"reason"`
 	Duration     *time.Duration      `json:"duration"`
+	PoolStats    *PoolStats          `json:"poolStats"`
 	// ServiceID is only set if the Type is PoolCleared and the server is deployed behind a load balancer. This field
 	// can be used to distinguish between individual servers in a load balanced deployment.
 	ServiceID *primitive.ObjectID `json:"serviceId"`
+}
+
+type PoolStats struct {
+	InUse   uint32 `json:"inUse"`
+	Opened  uint32 `json:"opened"`
+	Waiting uint32 `json:"waiting"`
 }
 
 // PoolMonitor is a function that allows the user to gain access to events occurring in the pool

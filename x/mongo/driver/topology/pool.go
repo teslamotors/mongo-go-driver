@@ -47,6 +47,9 @@ var expireConnectionRatio = uint(2)
 // expireConnectionFrequency is the duration we should wait between demand related connection expiration
 var expireConnectionFrequency = 5 * time.Second
 
+// statsInterval is the frequency at which stats will be published
+var statsInterval = 10 * time.Second
+
 func (pe PoolError) Error() string { return string(pe) }
 
 // poolConfig contains all aspects of the pool that can be configured
@@ -175,6 +178,9 @@ func (p *pool) connect() error {
 	}
 
 	p.closingChan = make(chan struct{})
+	if p.monitor != nil {
+		go p.statsPublisher(p.closingChan)
+	}
 	go p.manager(p.closingChan)
 	return nil
 }
@@ -249,10 +255,27 @@ func (p *pool) connectAndAdd(c *connection) {
 			Address:      p.address.String(),
 			ConnectionID: c.poolID,
 			Duration:     &elapsed,
+			PoolStats:    p.poolStats(),
 		})
 	}
 
 	p.poolChan <- c
+}
+
+func (p *pool) statsPublisher(doneChan chan struct{}) {
+	ticker := time.NewTicker(statsInterval)
+	for {
+		select {
+		case <-doneChan:
+			return
+		case <-ticker.C:
+			p.monitor.Event(&event.PoolEvent{
+				Type:      event.PoolStatsEvent,
+				Address:   p.address.String(),
+				PoolStats: p.poolStats(),
+			})
+		}
+	}
 }
 
 // manager spins up connections or reduces connections as needed
@@ -299,6 +322,16 @@ func (p *pool) connectionGlut() bool {
 	defer p.RUnlock()
 	opened := uint(len(p.opened))
 	return opened > expireConnectionRatio*(uint(p.inUse)+1) && opened > p.minSize
+}
+
+func (p *pool) poolStats() *event.PoolStats {
+	p.RLock()
+	defer p.RUnlock()
+	return &event.PoolStats{
+		InUse:   p.inUse,
+		Opened:  uint32(len(p.opened)),
+		Waiting: p.waiting,
+	}
 }
 
 // get returns a connection from the pool
@@ -455,6 +488,7 @@ func (p *pool) removeConnection(c *connection) {
 			Address:      c.pool.address.String(),
 			ConnectionID: c.poolID,
 			Reason:       c.expireReason,
+			PoolStats:    p.poolStats(),
 		})
 	}
 }
