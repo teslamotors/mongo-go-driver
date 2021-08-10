@@ -41,11 +41,11 @@ type PoolError string
 // maintainInterval is the interval at which the manager background routine will open and close connections.
 var maintainInterval = 10 * time.Millisecond
 
-// expireConnectionRatio is the ratio of opened/inuse which needs to be exceeded to begin closing connections
-var expireConnectionRatio = uint(2)
+// defaultExpireConnectionRatio is the ratio of opened/inuse which needs to be exceeded to begin closing connections
+var defaultExpireConnectionRatio = float32(3.0)
 
-// expireConnectionFrequency is the duration we should wait between demand related connection expiration
-var expireConnectionFrequency = 5 * time.Second
+// defaultExpireConnectionFrequency is the duration we should wait between demand related connection expiration
+var defaultExpireConnectionFrequency = 30 * time.Second
 
 // statsInterval is the frequency at which stats will be published
 var statsInterval = 10 * time.Second
@@ -54,11 +54,13 @@ func (pe PoolError) Error() string { return string(pe) }
 
 // poolConfig contains all aspects of the pool that can be configured
 type poolConfig struct {
-	Address     address.Address
-	MinPoolSize uint64
-	MaxPoolSize uint64 // MaxPoolSize is not used because handling the max number of connections in the pool is handled in server. This is only used for command monitoring
-	MaxIdleTime time.Duration
-	PoolMonitor *event.PoolMonitor
+	Address                   address.Address
+	ExpireConnectionFrequency *time.Duration
+	ExpireConnectionRatio     *float32
+	MinPoolSize               uint64
+	MaxPoolSize               uint64 // MaxPoolSize is not used because handling the max number of connections in the pool is handled in server. This is only used for command monitoring
+	MaxIdleTime               time.Duration
+	PoolMonitor               *event.PoolMonitor
 }
 
 // checkOutResult is all the values that can be returned from a checkOut
@@ -70,12 +72,14 @@ type checkOutResult struct {
 
 // pool is a wrapper of resource pool that follows the CMAP spec for connection pools
 type pool struct {
-	address    address.Address
-	opts       []ConnectionOption
-	generation *poolGenerationMap
-	monitor    *event.PoolMonitor
-	maxSize    uint
-	minSize    uint
+	address                   address.Address
+	opts                      []ConnectionOption
+	generation                *poolGenerationMap
+	expireConnectionFrequency time.Duration
+	expireConnectionRatio     float32
+	monitor                   *event.PoolMonitor
+	maxSize                   uint
+	minSize                   uint
 
 	poolChan    chan *connection
 	closingChan chan struct{}
@@ -131,16 +135,27 @@ func newPool(config poolConfig, connOpts ...ConnectionOption) (*pool, error) {
 		maxConns = maxConnections
 	}
 
+	expireConnectionFrequency := defaultExpireConnectionFrequency
+	if config.ExpireConnectionFrequency != nil {
+		expireConnectionFrequency = *config.ExpireConnectionFrequency
+	}
+
+	expireConnectionRatio := defaultExpireConnectionRatio
+	if config.ExpireConnectionRatio != nil {
+		expireConnectionRatio = *config.ExpireConnectionRatio
+	}
 	pool := &pool{
-		address:    config.Address,
-		maxSize:    maxConns,
-		minSize:    uint(config.MinPoolSize),
-		monitor:    config.PoolMonitor,
-		connected:  disconnected,
-		opened:     make(map[uint64]*connection),
-		opts:       opts,
-		poolChan:   make(chan *connection, maxConns),
-		generation: newPoolGenerationMap(),
+		address:                   config.Address,
+		expireConnectionFrequency: expireConnectionFrequency,
+		expireConnectionRatio:     expireConnectionRatio,
+		maxSize:                   maxConns,
+		minSize:                   uint(config.MinPoolSize),
+		monitor:                   config.PoolMonitor,
+		connected:                 disconnected,
+		opened:                    make(map[uint64]*connection),
+		opts:                      opts,
+		poolChan:                  make(chan *connection, maxConns),
+		generation:                newPoolGenerationMap(),
 	}
 	pool.opts = append(pool.opts, withGenerationNumberFn(func(_ generationNumberFn) generationNumberFn { return pool.getGenerationForNewConnection }))
 
@@ -289,7 +304,7 @@ func (p *pool) manager(doneChan chan struct{}) {
 		case <-ticker.C:
 			if p.connectionNeeded() {
 				p.addConnection()
-			} else if time.Since(lastCloseTime) > expireConnectionFrequency && p.connectionGlut() {
+			} else if time.Since(lastCloseTime) > p.expireConnectionFrequency && p.connectionGlut() {
 				go p.decrementConnections()
 				lastCloseTime = time.Now()
 			}
@@ -321,7 +336,7 @@ func (p *pool) connectionGlut() bool {
 	p.RLock()
 	defer p.RUnlock()
 	opened := uint(len(p.opened))
-	return opened > expireConnectionRatio*(uint(p.inUse)+1) && opened > p.minSize
+	return float32(opened) > p.expireConnectionRatio*(float32(p.inUse+1)) && opened > p.minSize
 }
 
 func (p *pool) poolStats() *event.PoolStats {
