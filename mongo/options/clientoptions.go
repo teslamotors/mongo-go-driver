@@ -109,6 +109,7 @@ type ClientOptions struct {
 	MaxConnIdleTime          *time.Duration
 	MaxPoolSize              *uint64
 	MinPoolSize              *uint64
+	MinConnIODuration        *time.Duration
 	PoolMonitor              *event.PoolMonitor
 	Monitor                  *event.CommandMonitor
 	ServerMonitor            *event.ServerMonitor
@@ -288,6 +289,10 @@ func (c *ClientOptions) ApplyURI(uri string) *ClientOptions {
 
 	if cs.MinPoolSizeSet {
 		c.MinPoolSize = &cs.MinPoolSize
+	}
+
+	if cs.MinConnIODurationSet {
+		c.MinConnIODuration = &cs.MinConnIODuration
 	}
 
 	if cs.ReadConcernLevel != "" {
@@ -553,6 +558,14 @@ func (c *ClientOptions) SetMinPoolSize(u uint64) *ClientOptions {
 	return c
 }
 
+// SetMinConnIODuration specifies the minimum amount of time that a connection should be used for network IO. Checkout from
+// the connection pool will fast fail if the remaining context deadline is below this threshold
+// The default is 0
+func (c *ClientOptions) SetMinConnIODuration(d time.Duration) *ClientOptions {
+	c.MinConnIODuration = &d
+	return c
+}
+
 // SetPoolMonitor specifies a PoolMonitor to receive connection pool events. See the event.PoolMonitor documentation
 // for more information about the structure of the monitor and events that can be received.
 func (c *ClientOptions) SetPoolMonitor(m *event.PoolMonitor) *ClientOptions {
@@ -803,6 +816,9 @@ func MergeClientOptions(opts ...*ClientOptions) *ClientOptions {
 		}
 		if opt.MaxConnIdleTime != nil {
 			c.MaxConnIdleTime = opt.MaxConnIdleTime
+		}
+		if opt.MinConnIODuration != nil {
+			c.MinConnIODuration = opt.MinConnIODuration
 		}
 		if opt.MaxPoolSize != nil {
 			c.MaxPoolSize = opt.MaxPoolSize
