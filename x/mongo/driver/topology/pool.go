@@ -296,7 +296,7 @@ func (p *pool) statsPublisher(doneChan chan struct{}) {
 // manager spins up connections or reduces connections as needed
 func (p *pool) manager(doneChan chan struct{}) {
 	ticker := time.NewTicker(maintainInterval)
-	lastCloseTime := time.Now()
+	reductionTicker := time.NewTicker(p.expireConnectionFrequency)
 	for {
 		select {
 		case <-doneChan:
@@ -304,9 +304,10 @@ func (p *pool) manager(doneChan chan struct{}) {
 		case <-ticker.C:
 			if p.connectionNeeded() {
 				p.addConnection()
-			} else if time.Since(lastCloseTime) > p.expireConnectionFrequency && p.connectionGlut() {
+			}
+		case <-reductionTicker.C:
+			if p.connectionGlut() {
 				go p.decrementConnections()
-				lastCloseTime = time.Now()
 			}
 		}
 	}
