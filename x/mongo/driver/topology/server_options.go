@@ -25,6 +25,7 @@ type serverConfig struct {
 	appname                   string
 	heartbeatInterval         time.Duration
 	heartbeatTimeout          time.Duration
+	maxConnecting             uint64
 	maxConns                  uint64
 	minConns                  uint64
 	poolMonitor               *event.PoolMonitor
@@ -101,6 +102,15 @@ func WithHeartbeatInterval(fn func(time.Duration) time.Duration) ServerOption {
 func WithHeartbeatTimeout(fn func(time.Duration) time.Duration) ServerOption {
 	return func(cfg *serverConfig) error {
 		cfg.heartbeatTimeout = fn(cfg.heartbeatTimeout)
+		return nil
+	}
+}
+
+// WithMaxConnecting configures the maximum number of connections that can be created
+// simultaniously. If max is 0, then the pool default will be 2.
+func WithMaxConnecting(fn func(uint64) uint64) ServerOption {
+	return func(cfg *serverConfig) error {
+		cfg.maxConnecting = fn(cfg.maxConnecting)
 		return nil
 	}
 }

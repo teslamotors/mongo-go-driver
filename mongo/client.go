@@ -531,6 +531,14 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 		))
 	}
 
+	// MaxConnecting
+	if opts.MaxConnecting != nil {
+		serverOpts = append(
+			serverOpts,
+			topology.WithMaxConnecting(func(uint64) uint64 { return *opts.MaxConnecting }),
+		)
+	}
+
 	// MaxPoolSize
 	if opts.MaxPoolSize != nil {
 		serverOpts = append(

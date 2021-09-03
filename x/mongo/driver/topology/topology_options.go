@@ -98,6 +98,10 @@ func WithConnString(fn func(connstring.ConnString) connstring.ConnString) Option
 			connOpts = append(connOpts, WithIdleTimeout(func(time.Duration) time.Duration { return cs.MaxConnIdleTime }))
 		}
 
+		if cs.MaxConnectingSet {
+			c.serverOpts = append(c.serverOpts, WithMaxConnecting(func(uint64) uint64 { return cs.MaxConnecting }))
+		}
+
 		if cs.MaxPoolSizeSet {
 			c.serverOpts = append(c.serverOpts, WithMaxConnections(func(uint64) uint64 { return cs.MaxPoolSize }))
 		}

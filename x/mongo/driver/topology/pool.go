@@ -47,6 +47,9 @@ var defaultExpireConnectionRatio = float32(3.0)
 // defaultExpireConnectionFrequency is the duration we should wait between demand related connection expiration
 var defaultExpireConnectionFrequency = 30 * time.Second
 
+// defaultMaxConnecting is the max number of connections that will be actively connecting
+var defaultMaxConnecting = uint(2)
+
 // statsInterval is the frequency at which stats will be published
 var statsInterval = 10 * time.Second
 
@@ -57,8 +60,9 @@ type poolConfig struct {
 	Address                   address.Address
 	ExpireConnectionFrequency *time.Duration
 	ExpireConnectionRatio     *float32
-	MinPoolSize               uint64
+	MaxConnecting             uint64
 	MaxPoolSize               uint64 // MaxPoolSize is not used because handling the max number of connections in the pool is handled in server. This is only used for command monitoring
+	MinPoolSize               uint64
 	MaxIdleTime               time.Duration
 	PoolMonitor               *event.PoolMonitor
 }
@@ -85,6 +89,7 @@ type pool struct {
 	closingChan chan struct{}
 	inUse       uint32
 	waiting     uint32
+	connecting  chan struct{} // Used for rate limiting
 
 	// Must be accessed using the atomic package.
 	connected                    int32
@@ -144,6 +149,11 @@ func newPool(config poolConfig, connOpts ...ConnectionOption) (*pool, error) {
 	if config.ExpireConnectionRatio != nil {
 		expireConnectionRatio = *config.ExpireConnectionRatio
 	}
+	maxConnecting := defaultMaxConnecting
+	if config.MaxConnecting > 0 {
+		maxConnecting = uint(config.MaxConnecting)
+	}
+
 	pool := &pool{
 		address:                   config.Address,
 		expireConnectionFrequency: expireConnectionFrequency,
@@ -152,6 +162,7 @@ func newPool(config poolConfig, connOpts ...ConnectionOption) (*pool, error) {
 		minSize:                   uint(config.MinPoolSize),
 		monitor:                   config.PoolMonitor,
 		connected:                 disconnected,
+		connecting:                make(chan struct{}, maxConnecting),
 		opened:                    make(map[uint64]*connection),
 		opts:                      opts,
 		poolChan:                  make(chan *connection, maxConns),
@@ -244,9 +255,12 @@ func (p *pool) addConnection() error {
 
 // connectAndAdd connects and then adds the connection to the buffered channel
 func (p *pool) connectAndAdd(c *connection) {
+	p.connecting <- struct{}{}
 	start := time.Now()
 	c.connect(context.Background())
 	err := c.wait()
+	<-p.connecting
+
 	if err != nil {
 		if p.monitor != nil {
 			p.monitor.Event(&event.PoolEvent{
@@ -302,7 +316,7 @@ func (p *pool) manager(doneChan chan struct{}) {
 		case <-doneChan:
 			return
 		case <-ticker.C:
-			if p.connectionNeeded() {
+			if p.connectionNeeded() && len(p.connecting) < cap(p.connecting) {
 				p.addConnection()
 			}
 		case <-reductionTicker.C:

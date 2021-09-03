@@ -107,6 +107,7 @@ type ClientOptions struct {
 	LoadBalanced             *bool
 	LocalThreshold           *time.Duration
 	MaxConnIdleTime          *time.Duration
+	MaxConnecting            *uint64
 	MaxPoolSize              *uint64
 	MinPoolSize              *uint64
 	MinConnIODuration        *time.Duration
@@ -281,6 +282,10 @@ func (c *ClientOptions) ApplyURI(uri string) *ClientOptions {
 
 	if cs.MaxConnIdleTimeSet {
 		c.MaxConnIdleTime = &cs.MaxConnIdleTime
+	}
+
+	if cs.MaxConnectingSet {
+		c.MaxConnecting = &cs.MaxConnecting
 	}
 
 	if cs.MaxPoolSizeSet {
@@ -539,6 +544,13 @@ func (c *ClientOptions) SetLocalThreshold(d time.Duration) *ClientOptions {
 // "maxIdleTimeMS=10000"). The default is 0, meaning a connection can remain unused indefinitely.
 func (c *ClientOptions) SetMaxConnIdleTime(d time.Duration) *ClientOptions {
 	c.MaxConnIdleTime = &d
+	return c
+}
+
+// SetMaxConnecting specifies that maximum number of connections allowed to connect concurrently.
+// The default is 2.
+func (c *ClientOptions) SetMaxConnecting(u uint64) *ClientOptions {
+	c.MaxConnecting = &u
 	return c
 }
 
@@ -819,6 +831,9 @@ func MergeClientOptions(opts ...*ClientOptions) *ClientOptions {
 		}
 		if opt.MinConnIODuration != nil {
 			c.MinConnIODuration = opt.MinConnIODuration
+		}
+		if opt.MaxConnecting != nil {
+			c.MaxConnecting = opt.MaxConnecting
 		}
 		if opt.MaxPoolSize != nil {
 			c.MaxPoolSize = opt.MaxPoolSize
