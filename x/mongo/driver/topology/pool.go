@@ -358,9 +358,10 @@ func (p *pool) poolStats() *event.PoolStats {
 	p.RLock()
 	defer p.RUnlock()
 	return &event.PoolStats{
-		InUse:   p.inUse,
-		Opened:  uint32(len(p.opened)),
-		Waiting: p.waiting,
+		Connecting: uint32(len(p.connecting)),
+		InUse:      p.inUse,
+		Opened:     uint32(len(p.opened)),
+		Waiting:    p.waiting,
 	}
 }
 

@@ -106,9 +106,10 @@ type PoolEvent struct {
 }
 
 type PoolStats struct {
-	InUse   uint32 `json:"inUse"`
-	Opened  uint32 `json:"opened"`
-	Waiting uint32 `json:"waiting"`
+	Connecting uint32 `json:"connecting"`
+	InUse      uint32 `json:"inUse"`
+	Opened     uint32 `json:"opened"`
+	Waiting    uint32 `json:"waiting"`
 }
 
 // PoolMonitor is a function that allows the user to gain access to events occurring in the pool
