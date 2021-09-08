@@ -107,8 +107,10 @@ type ClientOptions struct {
 	LoadBalanced             *bool
 	LocalThreshold           *time.Duration
 	MaxConnIdleTime          *time.Duration
+	MaxConnecting            *uint64
 	MaxPoolSize              *uint64
 	MinPoolSize              *uint64
+	MinConnIODuration        *time.Duration
 	PoolMonitor              *event.PoolMonitor
 	Monitor                  *event.CommandMonitor
 	ServerMonitor            *event.ServerMonitor
@@ -282,12 +284,20 @@ func (c *ClientOptions) ApplyURI(uri string) *ClientOptions {
 		c.MaxConnIdleTime = &cs.MaxConnIdleTime
 	}
 
+	if cs.MaxConnectingSet {
+		c.MaxConnecting = &cs.MaxConnecting
+	}
+
 	if cs.MaxPoolSizeSet {
 		c.MaxPoolSize = &cs.MaxPoolSize
 	}
 
 	if cs.MinPoolSizeSet {
 		c.MinPoolSize = &cs.MinPoolSize
+	}
+
+	if cs.MinConnIODurationSet {
+		c.MinConnIODuration = &cs.MinConnIODuration
 	}
 
 	if cs.ReadConcernLevel != "" {
@@ -537,6 +547,13 @@ func (c *ClientOptions) SetMaxConnIdleTime(d time.Duration) *ClientOptions {
 	return c
 }
 
+// SetMaxConnecting specifies that maximum number of connections allowed to connect concurrently.
+// The default is 2.
+func (c *ClientOptions) SetMaxConnecting(u uint64) *ClientOptions {
+	c.MaxConnecting = &u
+	return c
+}
+
 // SetMaxPoolSize specifies that maximum number of connections allowed in the driver's connection pool to each server.
 // Requests to a server will block if this maximum is reached. This can also be set through the "maxPoolSize" URI option
 // (e.g. "maxPoolSize=100"). The default is 100. If this is 0, it will be set to math.MaxInt64.
@@ -550,6 +567,14 @@ func (c *ClientOptions) SetMaxPoolSize(u uint64) *ClientOptions {
 // the minimum. This can also be set through the "minPoolSize" URI option (e.g. "minPoolSize=100"). The default is 0.
 func (c *ClientOptions) SetMinPoolSize(u uint64) *ClientOptions {
 	c.MinPoolSize = &u
+	return c
+}
+
+// SetMinConnIODuration specifies the minimum amount of time that a connection should be used for network IO. Checkout from
+// the connection pool will fast fail if the remaining context deadline is below this threshold
+// The default is 0
+func (c *ClientOptions) SetMinConnIODuration(d time.Duration) *ClientOptions {
+	c.MinConnIODuration = &d
 	return c
 }
 
@@ -803,6 +828,12 @@ func MergeClientOptions(opts ...*ClientOptions) *ClientOptions {
 		}
 		if opt.MaxConnIdleTime != nil {
 			c.MaxConnIdleTime = opt.MaxConnIdleTime
+		}
+		if opt.MinConnIODuration != nil {
+			c.MinConnIODuration = opt.MinConnIODuration
+		}
+		if opt.MaxConnecting != nil {
+			c.MaxConnecting = opt.MaxConnecting
 		}
 		if opt.MaxPoolSize != nil {
 			c.MaxPoolSize = opt.MaxPoolSize
