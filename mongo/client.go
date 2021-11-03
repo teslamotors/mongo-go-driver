@@ -523,6 +523,22 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 			func(time.Duration) time.Duration { return *opts.MaxConnIdleTime },
 		))
 	}
+
+	// MinConnIODuration
+	if opts.MinConnIODuration != nil {
+		connOpts = append(connOpts, topology.WithMinIODuration(
+			func(time.Duration) time.Duration { return *opts.MinConnIODuration },
+		))
+	}
+
+	// MaxConnecting
+	if opts.MaxConnecting != nil {
+		serverOpts = append(
+			serverOpts,
+			topology.WithMaxConnecting(func(uint64) uint64 { return *opts.MaxConnecting }),
+		)
+	}
+
 	// MaxPoolSize
 	if opts.MaxPoolSize != nil {
 		serverOpts = append(
@@ -537,6 +553,7 @@ func (c *Client) configure(opts *options.ClientOptions) error {
 			topology.WithMinConnections(func(uint64) uint64 { return *opts.MinPoolSize }),
 		)
 	}
+
 	// PoolMonitor
 	if opts.PoolMonitor != nil {
 		serverOpts = append(
